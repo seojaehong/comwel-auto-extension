@@ -1,0 +1,39 @@
+{
+  "manifest_version": 3,
+  "name": "근로복지공단 자동화",
+  "version": "1.0.0",
+  "description": "근로복지공단 사이트(total.comwel.or.kr) 업무 자동화 확장프로그램",
+  "permissions": [
+    "storage",
+    "activeTab",
+    "scripting",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://total.comwel.or.kr/*",
+    "https://*.comwel.or.kr/*"
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "background": {
+    "service_worker": "background/background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://total.comwel.or.kr/*", "https://*.comwel.or.kr/*"],
+      "js": ["utils/storage.js", "content/api-client.js", "content/content.js"],
+      "run_at": "document_end"
+    }
+  ],
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

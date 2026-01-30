@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>아이콘 생성기</title>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 20px; }
+    canvas { border: 1px solid #ccc; margin: 10px; }
+    .icon-group { display: inline-block; text-align: center; margin: 20px; }
+    button { padding: 10px 20px; margin: 10px; cursor: pointer; }
+    a { display: block; margin: 5px; }
+  </style>
+</head>
+<body>
+  <h1>근로복지공단 자동화 확장프로그램 아이콘 생성</h1>
+  <p>아래 링크를 각각 클릭하여 아이콘을 다운로드하세요.</p>
+
+  <div class="icon-group">
+    <h3>16x16</h3>
+    <canvas id="canvas16" width="16" height="16"></canvas>
+    <br><a id="link16" download="icon16.png">icon16.png 다운로드</a>
+  </div>
+
+  <div class="icon-group">
+    <h3>48x48</h3>
+    <canvas id="canvas48" width="48" height="48"></canvas>
+    <br><a id="link48" download="icon48.png">icon48.png 다운로드</a>
+  </div>
+
+  <div class="icon-group">
+    <h3>128x128</h3>
+    <canvas id="canvas128" width="128" height="128"></canvas>
+    <br><a id="link128" download="icon128.png">icon128.png 다운로드</a>
+  </div>
+
+  <script>
+    function drawIcon(canvasId, size) {
+      const canvas = document.getElementById(canvasId);
+      const ctx = canvas.getContext('2d');
+
+      // 배경 (둥근 사각형)
+      const radius = size * 0.125;
+      ctx.fillStyle = '#1a5f7a';
+      ctx.beginPath();
+      ctx.roundRect(0, 0, size, size, radius);
+      ctx.fill();
+
+      // 글자 "C" (Comwel의 C)
+      ctx.fillStyle = 'white';
+      ctx.font = `bold ${size * 0.6}px Arial`;
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText('C', size/2, size/2 + size*0.05);
+
+      return canvas.toDataURL('image/png');
+    }
+
+    // 아이콘 생성 및 다운로드 링크 설정
+    document.getElementById('link16').href = drawIcon('canvas16', 16);
+    document.getElementById('link48').href = drawIcon('canvas48', 48);
+    document.getElementById('link128').href = drawIcon('canvas128', 128);
+  </script>
+</body>
+</html>
