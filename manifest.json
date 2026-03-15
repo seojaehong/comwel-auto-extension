@@ -34,7 +34,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["test_upload.xlsx"],
+      "resources": ["test_upload.xlsx", "config/workplaces.json"],
       "matches": ["https://total.comwel.or.kr/*"]
     }
   ],

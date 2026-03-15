@@ -348,7 +348,7 @@ async function executeAutoUpload(msg) {
     });
     await wait(500);
 
-    // Step 4: "엑셀파일 불러오기" 라디오 선택 + 모달 열기
+    // Step 4: "엑셀파일 불러오기" 라디오 선택
     // 취득: Radio00_input_1 / 상실: rdoSingofg_input_1
     const radioExcel = document.getElementById('mf_wfm_content_Radio00_input_1')
       || document.getElementById('mf_wfm_content_rdoSingofg_input_1');
@@ -358,10 +358,9 @@ async function executeAutoUpload(msg) {
       await wait(1000);
     }
 
-    // "엑셀파일(일반근로자) 불러오기" 버튼 클릭 → 모달 열림
+    // Step 4b: 모달 열기
     const excelBtn = document.getElementById('mf_wfm_content_btnExcelIlban');
     if (!excelBtn) {
-      // 폴백: 기존 btnEXCEL 시도
       const excelBtnFallback = document.getElementById('mf_wfm_content_btnEXCEL');
       if (!excelBtnFallback) return { success: false, message: '엑셀파일 불러오기 버튼을 찾을 수 없습니다.' };
       excelBtnFallback.click();
@@ -377,7 +376,6 @@ async function executeAutoUpload(msg) {
       await wait(500);
       fileInput = document.getElementById('mf_wfm_content_grdMokrokExcel_excelPop_wframe_filename');
       if (fileInput) break;
-      // 대안 셀렉터
       if (!fileInput) fileInput = document.querySelector('input[type="file"][name="filename"]');
       if (!fileInput) fileInput = document.querySelector('[id*="excelPop"] input[type="file"]');
       if (fileInput) break;
@@ -400,7 +398,6 @@ async function executeAutoUpload(msg) {
 
     // Step 6: "파일 업로드" 버튼 클릭
     let uploadBtn = document.getElementById('mf_wfm_content_grdMokrokExcel_excelPop_wframe_sendFILE');
-    // 폴백: 텍스트로 찾기
     if (!uploadBtn) {
       document.querySelectorAll('button, input[type="button"], a, span').forEach(el => {
         const txt = (el.textContent || el.value || '').trim();
@@ -410,9 +407,11 @@ async function executeAutoUpload(msg) {
 
     if (uploadBtn) {
       uploadBtn.click();
-      await wait(3000); // 업로드 처리 대기
+      console.log('[comwel-ext] Step6 - 파일 업로드 클릭');
+      await wait(3000);
+      await dismissPopups(wait);
     } else {
-      return { success: false, message: '파일 업로드 버튼을 찾을 수 없습니다. 모달에서 수동으로 "파일 업로드"를 클릭해주세요.' };
+      return { success: false, message: '파일 업로드 버튼을 찾을 수 없습니다.' };
     }
 
     // Step 7: 순차 실행 (임시저장 → 신고자료검증 → 접수)
@@ -476,6 +475,38 @@ if (typeof chrome !== 'undefined' && chrome.runtime) {
         isOnUploadPage: ComwelUploadHelper.isOnUploadPage(),
         status: ComwelUploadHelper.getUploadStatus(),
       });
+    }
+    if (msg.action === 'resetPage') {
+      // 배치 처리: 다음 사업장을 위해 페이지 리셋
+      const menuCode = msg.menuCode || '10501';
+      console.log('[comwel-ext] resetPage: 메뉴 ' + menuCode + ' 클릭');
+
+      // 정확한 좌측 메뉴 ID로 클릭
+      const menuIds = {
+        '10501': 'mf_gen_firstGenerator_side_3_gen_SecondGenerator_side_0_subtitle',
+        '10502': 'mf_gen_firstGenerator_side_3_gen_SecondGenerator_side_1_subtitle',
+      };
+
+      let menuLink = document.getElementById(menuIds[menuCode]);
+
+      // 폴백: 텍스트로 찾기
+      if (!menuLink) {
+        document.querySelectorAll('a').forEach(a => {
+          if (a.textContent.trim().includes(menuCode) && a.offsetParent !== null) {
+            menuLink = a;
+          }
+        });
+      }
+
+      if (menuLink) {
+        menuLink.click();
+        console.log('[comwel-ext] resetPage: 메뉴 클릭 완료, id=' + menuLink.id);
+      } else {
+        console.log('[comwel-ext] resetPage: 메뉴 미발견, 페이지 새로고침');
+        location.reload();
+      }
+      sendResponse({ success: true });
+      return;
     }
     if (msg.action === 'autoUpload') {
       console.log('[comwel-ext] autoUpload 요청 수신:', msg.gwanriNo, msg.fileName);
