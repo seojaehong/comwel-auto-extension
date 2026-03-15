@@ -1,0 +1,7 @@
+# 개인 설정 (사업장 관리번호 등)
+config/workplaces.json
+
+# 테스트 파일
+test_*.xlsx
+test_*.b64
+inject_test.js

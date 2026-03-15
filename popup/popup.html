@@ -11,7 +11,7 @@
     <!-- 헤더 -->
     <header class="header">
       <h1>🏢 근로복지공단 자동화</h1>
-      <span class="version">v1.0.0</span>
+      <span class="version">v2.0.0</span>
     </header>
 
     <!-- 탭 메뉴 -->
@@ -19,6 +19,7 @@
       <button class="tab active" data-tab="api">API다운로드</button>
       <button class="tab" data-tab="data">데이터</button>
       <button class="tab" data-tab="batch">일괄작업</button>
+      <button class="tab" data-tab="upload">신고업로드</button>
       <button class="tab" data-tab="settings">설정</button>
     </nav>
 
@@ -157,6 +158,95 @@
       </div>
     </section>
 
+    <!-- 신고 자동업로드 탭 -->
+    <section id="upload" class="tab-content">
+      <div class="card">
+        <h2>신고서 자동 업로드</h2>
+        <p style="font-size:11px;color:#666;margin-bottom:10px">
+          급여엔진이 생성한 신고서 파일을 토탈서비스에 자동 업로드합니다.
+        </p>
+        <div class="form-group">
+          <label>신고 유형</label>
+          <div class="radio-group">
+            <label><input type="radio" name="uploadType" value="acquisition" checked> 취득신고</label>
+            <label><input type="radio" name="uploadType" value="loss"> 상실신고</label>
+          </div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>신고서 파일 선택</h2>
+        <div class="form-group">
+          <label>바탕화면의 신고서 파일을 선택하세요 (복수 가능)</label>
+          <input type="file" id="uploadFiles" accept=".xlsx,.xls" multiple>
+        </div>
+        <div id="uploadFileList" class="result-box">
+          <p class="placeholder">파일을 선택하면 사업장별 목록이 표시됩니다.</p>
+        </div>
+      </div>
+
+      <div id="uploadMappingCard" class="card" style="display:none">
+        <h2>사업장 매칭</h2>
+        <p style="font-size:11px;color:#666;margin-bottom:10px">
+          파일명에서 사업장을 추출했습니다. 관리번호를 확인/수정하세요.
+          <br>입력한 관리번호는 자동 저장되어 다음에 재사용됩니다.
+        </p>
+        <div id="uploadMappingRows"></div>
+      </div>
+
+      <div class="card">
+        <h2>사업장 DB 관리</h2>
+        <div class="form-group">
+          <label>저장된 사업장 목록 (이름 → 관리번호)</label>
+          <div id="bizDbList" class="result-box" style="max-height:100px">
+            <p class="placeholder">저장된 사업장이 없습니다.</p>
+          </div>
+        </div>
+        <div class="form-row">
+          <div class="form-group half">
+            <input type="text" id="bizDbName" placeholder="사업장명">
+          </div>
+          <div class="form-group half">
+            <input type="text" id="bizDbNo" placeholder="관리번호">
+          </div>
+        </div>
+        <div class="button-group">
+          <button id="btnBizDbAdd" class="btn secondary">추가</button>
+          <button id="btnBizDbImport" class="btn secondary">CSV 가져오기</button>
+          <input type="file" id="bizDbImportFile" accept=".csv,.txt" style="display:none">
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>업로드 실행</h2>
+        <div class="form-group">
+          <label>완료 후 액션</label>
+          <div class="radio-group">
+            <label><input type="radio" name="uploadAction" value="temp" checked> 임시저장</label>
+            <label><input type="radio" name="uploadAction" value="verify"> 임시저장+검증</label>
+            <label><input type="radio" name="uploadAction" value="submit"> 임시저장+검증+접수</label>
+          </div>
+        </div>
+        <div id="uploadProgress" class="progress-container" style="display:none">
+          <div class="progress-bar">
+            <div class="progress-fill" id="uploadProgressBar" style="width:0%"></div>
+          </div>
+          <p class="progress-text" id="uploadProgressText">0 / 0 완료</p>
+        </div>
+        <div class="button-group">
+          <button id="btnStartUpload" class="btn primary" disabled>자동 업로드 시작</button>
+          <button id="btnStopUpload" class="btn danger" disabled>중지</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>결과</h2>
+        <div id="uploadResult" class="result-box">
+          <p class="placeholder">업로드 결과가 여기에 표시됩니다.</p>
+        </div>
+      </div>
+    </section>
+
     <!-- 설정 탭 -->
     <section id="settings" class="tab-content">
       <div class="card">
@@ -177,7 +267,7 @@
       </div>
       <div class="card">
         <h2>정보</h2>
-        <p>버전: 1.0.0</p>
+        <p>버전: 2.0.0</p>
         <p>대상 사이트: total.comwel.or.kr</p>
         <p class="warning">⚠️ 비밀번호는 로컬에 암호화되어 저장됩니다.</p>
       </div>
@@ -187,6 +277,10 @@
     <div id="statusMessage" class="status-message"></div>
   </div>
 
+  <script src="../vendor/xlsx.mini.js"></script>
+  <script src="../lib/field-mappings.js"></script>
+  <script src="../lib/validator.js"></script>
+  <script src="../lib/excel-generator.js"></script>
   <script src="../utils/storage.js"></script>
   <script src="popup.js"></script>
 </body>

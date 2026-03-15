@@ -58,6 +58,20 @@ chrome.runtime.onMessage.addListener((request, sender, sendResponse) => {
       downloadAsFile(request.data, request.filename, request.type);
       sendResponse({ success: true });
       break;
+
+    case 'relayAutoUpload':
+      // popup → background → content script 중계 (팝업 닫혀도 안전)
+      chrome.tabs.sendMessage(request.tabId, request.payload)
+        .then(result => sendResponse(result))
+        .catch(err => sendResponse({ success: false, message: 'content script 통신 실패: ' + err.message }));
+      return true; // async
+
+    case 'downloadExcel':
+      // 엑셀 파일 다운로드 (base64 → blob → download)
+      downloadExcelFile(request.data, request.filename)
+        .then(() => sendResponse({ success: true }))
+        .catch(err => sendResponse({ success: false, error: err.message }));
+      return true; // async
   }
 });
 
@@ -114,6 +128,25 @@ function convertToCSV(data) {
 
   // 단순 배열인 경우
   return data.join('\n');
+}
+
+// 엑셀 파일 다운로드 (base64 입력, MV3 서비스워커 호환 — data URL 사용)
+async function downloadExcelFile(base64Data, filename) {
+  const dataUrl = 'data:application/vnd.openxmlformats-officedocument.spreadsheetml.sheet;base64,' + base64Data;
+
+  return new Promise((resolve, reject) => {
+    chrome.downloads.download({
+      url: dataUrl,
+      filename: filename,
+      saveAs: true,
+    }, (downloadId) => {
+      if (chrome.runtime.lastError) {
+        reject(new Error(chrome.runtime.lastError.message));
+      } else {
+        resolve(downloadId);
+      }
+    });
+  });
 }
 
 // 알림 표시

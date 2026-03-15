@@ -14,7 +14,7 @@ body {
 }
 
 .container {
-  width: 380px;
+  width: 420px;
   min-height: 500px;
   max-height: 600px;
   overflow-y: auto;
@@ -49,13 +49,14 @@ body {
 
 .tab {
   flex: 1;
-  padding: 10px 5px;
+  padding: 8px 3px;
   border: none;
   background: none;
   cursor: pointer;
-  font-size: 12px;
+  font-size: 11px;
   color: #666;
   transition: all 0.2s;
+  white-space: nowrap;
 }
 
 .tab:hover {
@@ -340,4 +341,123 @@ textarea {
 
 ::-webkit-scrollbar-thumb:hover {
   background: #a8a8a8;
+}
+
+/* ─── 신고 폼 스타일 ─── */
+.radio-group {
+  display: flex;
+  gap: 12px;
+  margin-top: 5px;
+}
+
+.radio-group label {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.form-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.form-group.half {
+  flex: 1;
+}
+
+.form-group.third {
+  flex: 1;
+}
+
+.simple-row {
+  padding: 10px;
+  border: 1px solid #e9ecef;
+  border-radius: 6px;
+  margin-bottom: 8px;
+  position: relative;
+}
+
+.simple-row:hover {
+  border-color: #1a5f7a;
+}
+
+.simple-row .btn-remove-row {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  background: none;
+  border: none;
+  color: #dc3545;
+  cursor: pointer;
+  font-size: 16px;
+  padding: 2px 6px;
+  line-height: 1;
+}
+
+.row-count {
+  text-align: center;
+  font-size: 11px;
+  color: #999;
+  margin-top: 5px;
+}
+
+/* 검증 결과 */
+.validation-result {
+  margin-top: 10px;
+}
+
+.validation-summary {
+  padding: 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  margin-bottom: 8px;
+}
+
+.validation-summary.pass {
+  background: #d4edda;
+  color: #155724;
+}
+
+.validation-summary.fail {
+  background: #f8d7da;
+  color: #721c24;
+}
+
+.validation-summary.warn {
+  background: #fff3cd;
+  color: #856404;
+}
+
+.validation-details {
+  max-height: 120px;
+  overflow-y: auto;
+  font-size: 11px;
+}
+
+.validation-details table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.validation-details th,
+.validation-details td {
+  padding: 4px 6px;
+  border: 1px solid #e9ecef;
+  text-align: left;
+}
+
+.validation-details th {
+  background: #f8f9fa;
+  font-weight: 600;
+}
+
+.validation-details tr.error td {
+  background: #fff5f5;
+}
+
+.validation-details tr.warning td {
+  background: #fffcf0;
 }

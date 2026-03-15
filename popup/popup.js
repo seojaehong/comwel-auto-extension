@@ -13,6 +13,7 @@ document.addEventListener('DOMContentLoaded', () => {
   initApiTab();
   initDataTab();
   initBatchTab();
+  initUploadTab();
   initSettingsTab();
   loadSavedData();
 });
@@ -767,4 +768,312 @@ function showStatus(message, type) {
   setTimeout(() => {
     statusEl.classList.remove('show');
   }, 3000);
+}
+
+// ==================== 신고 자동업로드 탭 ====================
+
+let uploadFiles = []; // { file: File, name: string, gwanriNo: string, base64: string }
+let isUploading = false;
+
+function initUploadTab() {
+  // 사업장 DB 초기화
+  initBizDb();
+
+  // 파일 선택
+  document.getElementById('uploadFiles').addEventListener('change', (e) => {
+    const files = Array.from(e.target.files);
+    if (files.length === 0) return;
+
+    uploadFiles = files.map(file => {
+      // 파일명에서 사업장명 추출
+      // 패턴: 취득신고서_사업장명_월.xlsx 또는 사업장명_취득신고서_성명_월.xlsx
+      const nameNoExt = file.name.replace(/\.xlsx?$/i, '');
+      let bizName = nameNoExt;
+      const parts = nameNoExt.split('_');
+      if (parts.length >= 2) {
+        // "취득신고서_다이닝원청주점_202601" → 다이닝원청주점
+        // "하나멜라민_취득신고서_차상화_202602" → 하나멜라민
+        if (parts[0].includes('신고서')) {
+          bizName = parts[1] || parts[0];
+        } else if (parts[1].includes('신고서')) {
+          bizName = parts[0];
+        } else {
+          bizName = parts[0];
+        }
+      }
+      return { file, name: file.name, bizName, gwanriNo: '', base64: null };
+    });
+
+    // 파일 목록 표시
+    const listEl = document.getElementById('uploadFileList');
+    listEl.textContent = uploadFiles.map((f, i) => `${i + 1}. ${f.name} → ${f.bizName}`).join('\n');
+
+    // 매칭 UI 표시
+    showMappingUI();
+    showStatus(`${uploadFiles.length}개 파일 선택됨`, 'success');
+  });
+
+  // 업로드 시작
+  document.getElementById('btnStartUpload').addEventListener('click', startBatchUpload);
+
+  // 중지
+  document.getElementById('btnStopUpload').addEventListener('click', () => {
+    isUploading = false;
+    showStatus('업로드 중지됨', 'info');
+  });
+}
+
+function showMappingUI() {
+  const card = document.getElementById('uploadMappingCard');
+  const container = document.getElementById('uploadMappingRows');
+  card.style.display = 'block';
+  container.innerHTML = '';
+
+  let allMatched = true;
+
+  uploadFiles.forEach((f, i) => {
+    // DB에서 자동매칭
+    const matched = matchGwanriNo(f.bizName);
+    f.gwanriNo = matched;
+    if (!matched) allMatched = false;
+
+    const row = document.createElement('div');
+    row.className = 'form-row';
+    row.style.marginBottom = '8px';
+    row.innerHTML = `
+      <div class="form-group" style="flex:1">
+        <label style="font-size:11px">${f.bizName} ${matched ? '\u2705' : '\u26a0\ufe0f 미등록'}</label>
+        <input type="text" class="upload-gwanri" data-idx="${i}"
+               placeholder="관리번호 입력" value="${matched}" style="font-size:12px">
+      </div>
+    `;
+    container.appendChild(row);
+  });
+
+  // 관리번호 입력 시 DB 자동저장 + 시작 버튼 체크
+  container.querySelectorAll('.upload-gwanri').forEach(input => {
+    input.addEventListener('input', checkUploadReady);
+    input.addEventListener('change', async function() {
+      const idx = parseInt(this.dataset.idx);
+      const no = this.value.trim();
+      if (no && uploadFiles[idx]) {
+        bizDb[uploadFiles[idx].bizName] = no;
+        await saveBizDb();
+        renderBizDbList();
+      }
+    });
+  });
+
+  document.getElementById('btnStartUpload').disabled = !allMatched;
+}
+
+function checkUploadReady() {
+  const inputs = document.querySelectorAll('.upload-gwanri');
+  let allFilled = true;
+  inputs.forEach((input, i) => {
+    uploadFiles[i].gwanriNo = input.value.trim();
+    if (!input.value.trim()) allFilled = false;
+  });
+  document.getElementById('btnStartUpload').disabled = !allFilled;
+}
+
+async function startBatchUpload() {
+  if (uploadFiles.length === 0) {
+    showStatus('파일을 선택해주세요.', 'error');
+    return;
+  }
+
+  // 관리번호 최종 수집
+  document.querySelectorAll('.upload-gwanri').forEach((input, i) => {
+    uploadFiles[i].gwanriNo = input.value.trim();
+  });
+
+  const missing = uploadFiles.filter(f => !f.gwanriNo);
+  if (missing.length > 0) {
+    showStatus(`관리번호 미입력: ${missing.map(f => f.bizName).join(', ')}`, 'error');
+    return;
+  }
+
+  // 파일을 base64로 변환
+  for (const f of uploadFiles) {
+    f.base64 = await fileToBase64(f.file);
+  }
+
+  const uploadType = document.querySelector('input[name="uploadType"]:checked').value;
+  const uploadAction = document.querySelector('input[name="uploadAction"]:checked').value;
+
+  isUploading = true;
+  document.getElementById('btnStartUpload').disabled = true;
+  document.getElementById('btnStopUpload').disabled = false;
+  document.getElementById('uploadProgress').style.display = 'block';
+
+  const results = [];
+
+  for (let i = 0; i < uploadFiles.length; i++) {
+    if (!isUploading) break;
+
+    const f = uploadFiles[i];
+    updateUploadProgress(i, uploadFiles.length, f.bizName);
+
+    try {
+      const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
+      if (!tab || !tab.url || !tab.url.includes('comwel.or.kr')) {
+        results.push({ name: f.bizName, status: 'FAIL', message: '토탈서비스 탭 아님' });
+        continue;
+      }
+
+      // background를 경유해서 content script에 업로드 명령 전송
+      const response = await new Promise((resolve) => {
+        chrome.runtime.sendMessage({
+          action: 'relayAutoUpload',
+          tabId: tab.id,
+          payload: {
+            action: 'autoUpload',
+            gwanriNo: f.gwanriNo,
+            fileBase64: f.base64,
+            fileName: f.name,
+            uploadType: uploadType,
+            uploadAction: uploadAction,
+          },
+        }, (res) => {
+          resolve(res || { success: false, message: '응답 없음' });
+        });
+      });
+
+      results.push({
+        name: f.bizName,
+        gwanriNo: f.gwanriNo,
+        status: response.success ? 'OK' : 'FAIL',
+        message: response.message || '',
+      });
+
+      // 다음 사업장 전 대기
+      if (i < uploadFiles.length - 1 && isUploading) {
+        await wait(2000);
+      }
+    } catch (e) {
+      results.push({ name: f.bizName, status: 'ERROR', message: e.message });
+    }
+  }
+
+  // 결과 표시
+  isUploading = false;
+  document.getElementById('btnStartUpload').disabled = false;
+  document.getElementById('btnStopUpload').disabled = true;
+  updateUploadProgress(uploadFiles.length, uploadFiles.length, '완료');
+
+  const resultEl = document.getElementById('uploadResult');
+  const ok = results.filter(r => r.status === 'OK').length;
+  const fail = results.filter(r => r.status !== 'OK').length;
+  resultEl.textContent = `완료: ${ok}건 성공 / ${fail}건 실패\n\n` +
+    results.map(r => `${r.status === 'OK' ? '\u2705' : '\u274c'} ${r.name} (${r.gwanriNo}) - ${r.message}`).join('\n');
+}
+
+function updateUploadProgress(current, total, label) {
+  const pct = total > 0 ? Math.round((current / total) * 100) : 0;
+  document.getElementById('uploadProgressBar').style.width = pct + '%';
+  document.getElementById('uploadProgressText').textContent = `${current} / ${total} - ${label}`;
+}
+
+function fileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result.split(',')[1]; // data:...;base64,XXXXX
+      resolve(base64);
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+// ==================== 사업장 DB (Chrome Storage) ====================
+
+let bizDb = {}; // { 사업장명: 관리번호 }
+
+async function loadBizDb() {
+  return new Promise(resolve => {
+    chrome.storage.local.get('bizDb', (result) => {
+      bizDb = result.bizDb || {};
+      resolve(bizDb);
+    });
+  });
+}
+
+async function saveBizDb() {
+  return new Promise(resolve => {
+    chrome.storage.local.set({ bizDb }, resolve);
+  });
+}
+
+function renderBizDbList() {
+  const el = document.getElementById('bizDbList');
+  const entries = Object.entries(bizDb);
+  if (entries.length === 0) {
+    el.textContent = '저장된 사업장이 없습니다.';
+    return;
+  }
+  el.textContent = entries.map(([name, no]) => `${name} → ${no}`).join('\n');
+}
+
+function initBizDb() {
+  loadBizDb().then(() => {
+    renderBizDbList();
+  });
+
+  // 수동 추가
+  document.getElementById('btnBizDbAdd').addEventListener('click', async () => {
+    const name = document.getElementById('bizDbName').value.trim();
+    const no = document.getElementById('bizDbNo').value.trim();
+    if (!name || !no) { showStatus('사업장명과 관리번호를 입력하세요.', 'error'); return; }
+    bizDb[name] = no;
+    await saveBizDb();
+    renderBizDbList();
+    document.getElementById('bizDbName').value = '';
+    document.getElementById('bizDbNo').value = '';
+    showStatus(`${name} 저장됨`, 'success');
+  });
+
+  // CSV 가져오기
+  document.getElementById('btnBizDbImport').addEventListener('click', () => {
+    document.getElementById('bizDbImportFile').click();
+  });
+  document.getElementById('bizDbImportFile').addEventListener('change', async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async (event) => {
+      const lines = event.target.result.trim().split(/\r?\n/);
+      let count = 0;
+      lines.forEach(line => {
+        const parts = line.split(',').map(p => p.trim());
+        if (parts.length >= 2 && parts[0] && parts[1]) {
+          bizDb[parts[0]] = parts[1];
+          count++;
+        }
+      });
+      await saveBizDb();
+      renderBizDbList();
+      showStatus(`${count}개 사업장 가져옴`, 'success');
+    };
+    reader.readAsText(file);
+  });
+}
+
+/**
+ * 파일명에서 추출한 사업장명으로 관리번호 자동 매칭
+ * 부분 매칭 지원 (DB에 "다이닝원청주점"이 있으면 파일명의 "다이닝원청주점"과 매칭)
+ */
+function matchGwanriNo(bizName) {
+  // 정확히 일치
+  if (bizDb[bizName]) return bizDb[bizName];
+  // 부분 매칭 (DB 키가 bizName을 포함하거나 bizName이 DB 키를 포함)
+  for (const [name, no] of Object.entries(bizDb)) {
+    if (name.includes(bizName) || bizName.includes(name)) return no;
+  }
+  return '';
 }
