@@ -1,5 +1,7 @@
 'use strict';
 
+// WebSquare $w 패치는 websquare-patch.js (MAIN world)에서 처리
+
 /**
  * 토탈서비스 엑셀 업로드 화면 자동 이동
  *
@@ -266,11 +268,97 @@ async function dismissPopups(wait) {
 }
 
 /**
+ * 버튼 클릭 후 나타나는 모든 팝업/토스트를 polling으로 처리
+ * confirm("하시겠습니까?") → 서버처리 대기 → toast("저장되었습니다.") 등
+ * 최대 maxMs 동안 300ms 간격으로 팝업 확인 버튼을 찾아 클릭
+ * 팝업이 2초간 안 나타나면 처리 완료로 판단
+ */
+async function waitAndDismissAll(wait, maxMs = 15000) {
+  const start = Date.now();
+  let lastDismissTime = Date.now();
+
+  while (Date.now() - start < maxMs) {
+    let dismissed = false;
+
+    // 방법 1: id에 "confirm"이 포함된 wframe 버튼 (WebSquare 토스트/confirm 공통 패턴)
+    const wframeBtn = document.querySelector('[id*="confirm"][id*="wframe_btn_confirm"], [id*="confirm"][id*="wframe_btn_ok"]');
+    if (wframeBtn && wframeBtn.offsetParent !== null) {
+      console.log('[comwel-ext] 토스트/팝업 확인 클릭: id=' + wframeBtn.id);
+      wframeBtn.click();
+      dismissed = true;
+      lastDismissTime = Date.now();
+      await wait(3000); // 서버 처리 후 다음 토스트 대기
+      continue;
+    }
+
+    // 방법 2: 기존 dismissPopups 로직 (class 기반)
+    document.querySelectorAll('button, input[type="button"], span, a').forEach(el => {
+      if (dismissed) return;
+      const txt = (el.textContent || el.value || '').trim();
+      if ((txt === '확인' || txt === '예' || txt === 'OK') && el.offsetParent !== null) {
+        const parent = el.closest('[class*="confirm"], [class*="alert"], [class*="msgbox"], [class*="popup"], [id*="Confirm"], [id*="confirm"], [id*="alert"], [id*="Alert"]');
+        if (parent && parent.offsetParent !== null) {
+          console.log('[comwel-ext] 팝업 확인 클릭(polling): id=' + el.id + ' text=' + txt);
+          el.click();
+          dismissed = true;
+          lastDismissTime = Date.now();
+        }
+      }
+    });
+
+    if (dismissed) {
+      await wait(500);
+      continue;
+    }
+
+    // 5초간 새 팝업이 안 나타나면 완료로 판단 (서버 처리 대기)
+    if (Date.now() - lastDismissTime > 5000) {
+      break;
+    }
+
+    await wait(300);
+  }
+}
+
+/**
  * 자동 업로드 실행
  * popup에서 base64 엑셀 + 사업장 관리번호를 받아 전체 흐름 자동 실행
  */
 async function executeAutoUpload(msg) {
   const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
+
+  function setAutomationActive(active) {
+    if (active) {
+      document.documentElement.setAttribute('data-comwel-auto', 'true');
+    } else {
+      document.documentElement.removeAttribute('data-comwel-auto');
+    }
+
+    try {
+      if (window.top && window.top !== window) {
+        if (active) {
+          window.top.document.documentElement.setAttribute('data-comwel-auto', 'true');
+        } else {
+          window.top.document.documentElement.removeAttribute('data-comwel-auto');
+        }
+      }
+    } catch (e) {
+      // frame 경계 접근 실패 시 localStorage 플래그로 보완
+    }
+
+    try {
+      if (active) {
+        localStorage.setItem('comwel-auto-active', 'true');
+      } else {
+        localStorage.removeItem('comwel-auto-active');
+      }
+    } catch (e) {
+      // 저장소 접근 실패 시 무시
+    }
+  }
+
+  // 자동화 플래그 ON (alert/confirm 오버라이드에서 참조)
+  setAutomationActive(true);
 
   try {
     // Step 1: 사업장관리번호 입력
@@ -409,7 +497,9 @@ async function executeAutoUpload(msg) {
       uploadBtn.click();
       console.log('[comwel-ext] Step6 - 파일 업로드 클릭');
       await wait(3000);
-      await dismissPopups(wait);
+      console.log('[comwel-ext] Step6 - 업로드 후 토스트 대기 시작');
+      await waitAndDismissAll(wait, 10000);
+      console.log('[comwel-ext] Step6 - 토스트 처리 완료, Step7 진입');
     } else {
       return { success: false, message: '파일 업로드 버튼을 찾을 수 없습니다.' };
     }
@@ -437,25 +527,29 @@ async function executeAutoUpload(msg) {
     for (const step of steps) {
       await wait(2000);
 
-      // WebSquare confirm/alert 팝업 자동 닫기 (최대 5초)
+      // WebSquare confirm/alert 팝업 자동 닫기 (잔여 팝업 정리)
       await dismissPopups(wait);
 
       const actionBtn = step.find();
       if (actionBtn) {
         console.log('[comwel-ext] Step7 - ' + step.label + ' 버튼 클릭, id=' + actionBtn.id);
         actionBtn.click();
-        await wait(1500);
 
-        // 클릭 후 나타나는 confirm 팝업 자동 처리 (최대 5초)
-        await dismissPopups(wait);
+        // 클릭 후 나타나는 모든 팝업/토스트를 polling으로 처리 (최대 15초)
+        // 임시저장: confirm("하시겠습니까?") → 서버처리 → toast("저장되었습니다.")
+        // 신고자료검증: 서버처리 → toast("검증 완료")
+        // 접수: confirm("접수하시겠습니까?") → toast("접수 완료")
+        await waitAndDismissAll(wait, 15000);
       } else {
         return { success: true, message: `${msg.gwanriNo} ${step.label} 버튼 미발견 - 수동 처리 필요` };
       }
     }
 
     const finalLabel = steps.length > 0 ? steps[steps.length - 1].label : '엑셀 업로드';
+    setAutomationActive(false);
     return { success: true, message: `${msg.gwanriNo} ${finalLabel} 완료` };
   } catch (e) {
+    setAutomationActive(false);
     return { success: false, message: '자동 업로드 오류: ' + e.message };
   }
 }

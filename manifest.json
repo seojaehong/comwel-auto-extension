@@ -28,8 +28,16 @@
   "content_scripts": [
     {
       "matches": ["https://total.comwel.or.kr/*", "https://*.comwel.or.kr/*"],
+      "js": ["content/websquare-patch.js"],
+      "run_at": "document_end",
+      "world": "MAIN",
+      "all_frames": true
+    },
+    {
+      "matches": ["https://total.comwel.or.kr/*", "https://*.comwel.or.kr/*"],
       "js": ["utils/storage.js", "content/api-client.js", "content/content.js", "content/upload-helper.js"],
-      "run_at": "document_end"
+      "run_at": "document_end",
+      "all_frames": true
     }
   ],
   "web_accessible_resources": [
